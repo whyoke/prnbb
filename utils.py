@@ -12,9 +12,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageOps
 from sklearn.model_selection import train_test_split
+import io, base64
+
+
+def convert_base64_img(base64_str):
+    img = Image.open(io.BytesIO(base64.decodebytes(bytes(base64_str, "utf-8"))))
+    return img
 
 CATEGORIES = [
-       {"supercategory": "monkey", "id": 1, "name": "monkey"},
+    {"supercategory": "monkey", "id": 1, "name": "monkey"}
 
 ]
 
@@ -169,46 +175,34 @@ def plot_poly(
     return image, image_blend_resize
 
 
-def create_coco_data_dict(
-    path: str,
-    labels: list = ["melasma", "hori nevus", "solar lentigines"],
-    start=0,
-    categories=CATEGORIES,
-):
-    """
-    Create COCO dataset to be saved in JSON format from a given path.
-    Path should contain images and annotations.
 
-    path: str, path to image and annotation JSON files
-    labels: list, interested labels
-    start: int, default 0, starting index of the image index
-    categories: list, default CATEGORIES, COCO categories
-    """
-    # map between class name and id
+def create_coco_data_dict(paths: list, labels: list = ["monkey"], start: int = 0, categories: list = CATEGORIES):
+    """Loop to all paths to labelme JSON and create COCO dataset format in dictionary format"""
     categories_dict = {d["name"].lower(): d["id"] for d in categories}
-
-    df = create_df_from_dir(path)
     images, annotations = [], []
-    for i, r in tqdm(df.iterrows(), total=len(df)):
+    for i, path in tqdm(enumerate(paths)):
         image_id = start + i
-        image_path = r.image_path
-        annotation_path = r.annotation_path
-        image_name = op.basename(image_path)
-
-        # Read annotation file
-        raw_annotation_info = read_annotation_file(annotation_path)
-        raw_annotations = raw_annotation_info["shapes"]
-
-        # Calculate image size ratio from annotation file with input image
-        original_image_width = raw_annotation_info["imageWidth"]
-        original_image_height = raw_annotation_info["imageHeight"]
-
-        raw_annotations = read_annotation_file(annotation_path)["shapes"]
-        for annotation in raw_annotations:
+        raw_annotations = read_annotation_file(path)
+        image = convert_base64_img(raw_annotations["imageData"])
+        shapes = raw_annotations["shapes"]
+        original_image_width = raw_annotations["imageWidth"]
+        original_image_height = raw_annotations["imageHeight"]
+        image_name = raw_annotations["imagePath"]
+        image_path = os.path.join("train", raw_annotations["imagePath"])
+        
+        image_width, image_height = image.size
+        image_dict = {
+            "id": image_id,
+            "width": image_width,
+            "height": image_height,
+            "file_name": image_name,
+            "file_path": image_path,
+        }
+        images.append(image_dict)
+        for annotation in shapes:
             label = annotation["label"].lower()
             if label in labels:
                 category_id = categories_dict[label]
-                image = Image.open(image_path)
                 image_width, image_height = image.size
 
                 resize_raito = original_image_height / image_height
@@ -235,13 +229,6 @@ def create_coco_data_dict(
                     height = bbox[2] - bbox[0]
                     coco_bbox = [int(bbox[1]), int(bbox[0]), int(width), int(height)]
                     area = float(width * height)
-                    image_dict = {
-                        "id": image_id,
-                        "width": image_width,
-                        "height": image_height,
-                        "file_name": image_name,
-                        "file_path": image_path,
-                    }
                     annotation_dict = {
                         "id": image_id,
                         "image_id": image_id,
@@ -254,7 +241,6 @@ def create_coco_data_dict(
                         "original_bbox": bbox.tolist(),
                         "points": points.tolist(),
                     }
-                    images.append(image_dict)
                     annotations.append(annotation_dict)
     coco_data_dict = {
         "categories": categories,
