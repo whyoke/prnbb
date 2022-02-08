@@ -1,28 +1,28 @@
 """Utilities for skin AI project"""
-import os
-import os.path as op
-from tqdm import tqdm
-import json
 from glob import glob
 from shutil import copyfile
 from typing import Optional
-import numpy as np
-import pandas as pd
-
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageOps
 from sklearn.model_selection import train_test_split
+from tqdm.auto import tqdm
+
+import numpy as np
+import pandas as pd
+import os.path as op
+import os
 import io, base64
+import json
+
+
+CATEGORIES = [
+    {"supercategory": "monkey", "id": 1, "name": "monkey"},
+]
 
 
 def convert_base64_img(base64_str):
     img = Image.open(io.BytesIO(base64.decodebytes(bytes(base64_str, "utf-8"))))
     return img
 
-CATEGORIES = [
-    {"supercategory": "monkey", "id": 1, "name": "monkey"}
-
-]
 
 def extract_bboxes(mask):
     """Compute bounding boxes from masks.
@@ -47,6 +47,7 @@ def extract_bboxes(mask):
             x1, x2, y1, y2 = 0, 0, 0, 0
         boxes[i] = np.array([y1, x1, y2, x2])
     return boxes.astype(np.int32)
+
 
 def read_annotation_file(path):
     """Read annotation file"""
@@ -81,27 +82,6 @@ def create_df_from_dir(path_dir: str, output_size: bool = False):
     img_df["img_name"] = img_df.image_path.map(lambda x: op.basename(x).replace(".jpg", ""))
     annotation_df["img_name"] = annotation_df.annotation_path.map(
         lambda x: op.basename(x).replace(".json", "")
-    )
-    df = img_df.merge(annotation_df, on="img_name")
-
-    if output_size:
-        print(f"Number of image: {len(img_paths)}")
-        print(f"Number of annotation JSON: {len(annotation_paths)}")
-        print(f"Total number of : {len(df)}")
-    return df
-
-
-def create_df_from_dir_(img_dir: str, annoatation_dir: str, output_size: bool = False):
-    """
-    Create training dataframe from directory
-    """
-    img_paths = glob(f"{img_dir}/*.jpg")
-    annotation_paths = glob(f"{annoatation_dir}/*.json")
-    img_df = pd.DataFrame(img_paths, columns=["image_path"])
-    annotation_df = pd.DataFrame(annotation_paths, columns=["annotation_path"])
-    img_df["img_name"] = img_df.image_path.map(lambda x: op.basename(x).replace(".jpg", ""))
-    annotation_df["img_name"] = annotation_df.annotation_path.map(
-        lambda x: op.basename(x).replace("_c.json", "")
     )
     df = img_df.merge(annotation_df, on="img_name")
 
@@ -175,8 +155,9 @@ def plot_poly(
     return image, image_blend_resize
 
 
-
-def create_coco_data_dict(paths: list, labels: list = ["monkey"], start: int = 0, categories: list = CATEGORIES):
+def create_coco_data_dict(
+    paths: list, labels: list = ["monkey"], start: int = 0, categories: list = CATEGORIES
+):
     """Loop to all paths to labelme JSON and create COCO dataset format in dictionary format"""
     categories_dict = {d["name"].lower(): d["id"] for d in categories}
     images, annotations = [], []
@@ -189,7 +170,7 @@ def create_coco_data_dict(paths: list, labels: list = ["monkey"], start: int = 0
         original_image_height = raw_annotations["imageHeight"]
         image_name = raw_annotations["imagePath"]
         image_path = os.path.join("train", raw_annotations["imagePath"])
-        
+
         image_width, image_height = image.size
         image_dict = {
             "id": image_id,
